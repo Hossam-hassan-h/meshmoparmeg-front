@@ -86,7 +86,7 @@ export const StudentDashboard = () => {
                 <div className="space-y-4">
                   <div className="aspect-video relative overflow-hidden bg-slate-100 border-b border-[#E2E8F0]">
                     <img
-                      src={course.thumbnail?.url || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800'}
+                      src={course.thumbnail?.url || ''}
                       alt={course.title}
                       className="w-full h-full object-cover"
                     />

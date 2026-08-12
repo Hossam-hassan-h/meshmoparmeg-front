@@ -74,12 +74,13 @@ export const VideoPlayer = () => {
         <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl">
           {course?.video?.url ? (
             <video
-              src={course.video.url}
+              key={course.video.url}
               controls
               controlsList="nodownload"
               poster={course.thumbnail?.url}
               className="w-full h-full object-contain"
             >
+              <source src={course.video.url} type="video/mp4" />
               Your browser does not support HTML5 video playback.
             </video>
           ) : (

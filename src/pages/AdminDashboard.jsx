@@ -65,7 +65,7 @@ export const AdminDashboard = () => {
   const [sortDirection, setSortDirection] = useState('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
-  
+
   // Independent Create User State
   const [createUserModalOpen, setCreateUserModalOpen] = useState(false);
   const [createUserForm, setCreateUserForm] = useState({
@@ -109,7 +109,6 @@ export const AdminDashboard = () => {
     description: '',
     teachingMethodology: '',
     difficulty: 'Beginner',
-    duration: '4 Hours',
     category: '',
     accessType: 'PRIVATE',
     requirements: '',
@@ -120,6 +119,17 @@ export const AdminDashboard = () => {
   const [thumbnailFile, setThumbnailFile] = useState(null);
   const [videoFile, setVideoFile] = useState(null);
   const [submittingCourse, setSubmittingCourse] = useState(false);
+
+  const [thumbnailUploading, setThumbnailUploading] = useState(false);
+  const [thumbnailProgress, setThumbnailProgress] = useState(0);
+  const [thumbnailSuccess, setThumbnailSuccess] = useState(false);
+  const [thumbnailInfo, setThumbnailInfo] = useState(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState('');
+
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoSuccess, setVideoSuccess] = useState(false);
+  const [videoInfo, setVideoInfo] = useState(null);
 
   // Fetch Stats & Core Admin Data
   const fetchDashboardData = async () => {
@@ -407,6 +417,8 @@ export const AdminDashboard = () => {
   };
 
   // Course Actions
+  // Course Actions
+  // Course Actions
   const openCreateCourseModal = () => {
     setEditingCourse(null);
     setCourseForm({
@@ -414,16 +426,24 @@ export const AdminDashboard = () => {
       description: '',
       teachingMethodology: '',
       difficulty: 'Beginner',
-      duration: '4 Hours',
       category: categories[0]?._id || '',
       accessType: 'PRIVATE',
       requirements: '',
       learningOutcomes: '',
-      thumbnailUrl: '',
-      videoUrl: '',
+      thumbnail: null,
+      video: null,
     });
     setThumbnailFile(null);
     setVideoFile(null);
+    setThumbnailPreview('');
+    setThumbnailSuccess(false);
+    setThumbnailInfo(null);
+    setVideoInfo(null);
+    setVideoSuccess(false);
+    setThumbnailUploading(false);
+    setVideoUploading(false);
+    setThumbnailProgress(0);
+    setVideoProgress(0);
     setCourseModalOpen(true);
   };
 
@@ -434,21 +454,77 @@ export const AdminDashboard = () => {
       description: course.description,
       teachingMethodology: course.teachingMethodology,
       difficulty: course.difficulty || 'Beginner',
-      duration: course.duration || '4 Hours',
       category: course.category?._id || course.category || '',
       accessType: course.accessType || 'PRIVATE',
       requirements: course.requirements?.join(', ') || '',
       learningOutcomes: course.learningOutcomes?.join(', ') || '',
-      thumbnailUrl: course.thumbnail?.url || '',
-      videoUrl: course.video?.url || '',
+      thumbnail: course.thumbnail || null,
+      video: course.video || null,
     });
     setThumbnailFile(null);
     setVideoFile(null);
+    setThumbnailPreview(course.thumbnail?.url || '');
+    setThumbnailSuccess(!!course.thumbnail?.url);
+    setThumbnailInfo(null);
+    setVideoInfo(course.video?.url ? { name: 'Cloudinary Hosted Video', size: 'Cloudinary' } : null);
+    setVideoSuccess(!!course.video?.url);
+    setThumbnailUploading(false);
+    setVideoUploading(false);
+    setThumbnailProgress(0);
+    setVideoProgress(0);
     setCourseModalOpen(true);
+  };
+
+  const handleThumbnailChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Unsupported file format. Please upload jpg, jpeg, png, or webp');
+      return;
+    }
+
+    setThumbnailFile(file);
+    setThumbnailInfo({ name: file.name, size: (file.size / (1024 * 1024)).toFixed(2) + ' MB' });
+    setThumbnailPreview(URL.createObjectURL(file));
+    setThumbnailSuccess(true);
+  };
+
+  const handleVideoChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate type
+    const allowedTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    if (!allowedTypes.includes(file.type) && !['mp4', 'mov', 'webm', 'avi'].includes(fileExt)) {
+      toast.error('Unsupported video format. Please upload mp4, mov, webm, or avi');
+      return;
+    }
+
+    setVideoFile(file);
+    setVideoInfo({ name: file.name, size: (file.size / (1024 * 1024)).toFixed(2) + ' MB' });
+    setVideoSuccess(true);
   };
 
   const handleCourseSubmit = async (e) => {
     e.preventDefault();
+
+    const finalThumbnail = editingCourse ? courseForm.thumbnail : null;
+    const finalVideo = editingCourse ? courseForm.video : null;
+
+    if (!thumbnailFile && (!finalThumbnail || !finalThumbnail.url)) {
+      toast.error('Please select a Course Thumbnail.');
+      return;
+    }
+
+    if (!videoFile && (!finalVideo || !finalVideo.url)) {
+      toast.error('Please select a Lecture Video.');
+      return;
+    }
+
     setSubmittingCourse(true);
 
     try {
@@ -457,38 +533,39 @@ export const AdminDashboard = () => {
       formData.append('description', courseForm.description);
       formData.append('teachingMethodology', courseForm.teachingMethodology);
       formData.append('difficulty', courseForm.difficulty);
-      formData.append('duration', courseForm.duration);
-      if (courseForm.category) formData.append('category', courseForm.category);
+      if (courseForm.category) {
+        formData.append('category', courseForm.category);
+      }
       formData.append('accessType', courseForm.accessType);
+      
+      const reqs = courseForm.requirements.split(',').map((s) => s.trim()).filter(Boolean);
+      formData.append('requirements', JSON.stringify(reqs));
 
-      const reqArray = courseForm.requirements.split(',').map((s) => s.trim()).filter(Boolean);
-      const outArray = courseForm.learningOutcomes.split(',').map((s) => s.trim()).filter(Boolean);
-
-      reqArray.forEach((r) => formData.append('requirements', r));
-      outArray.forEach((o) => formData.append('learningOutcomes', o));
+      const outs = courseForm.learningOutcomes.split(',').map((s) => s.trim()).filter(Boolean);
+      formData.append('learningOutcomes', JSON.stringify(outs));
 
       if (thumbnailFile) {
         formData.append('thumbnail', thumbnailFile);
-      } else if (courseForm.thumbnailUrl) {
-        formData.append('thumbnailUrl', courseForm.thumbnailUrl);
+      } else if (finalThumbnail) {
+        formData.append('thumbnail', JSON.stringify(finalThumbnail));
       }
 
       if (videoFile) {
         formData.append('video', videoFile);
-      } else if (courseForm.videoUrl) {
-        formData.append('videoUrl', courseForm.videoUrl);
+      } else if (finalVideo) {
+        formData.append('video', JSON.stringify(finalVideo));
       }
 
+      const config = {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      };
+
       if (editingCourse) {
-        await API.put(`/courses/${editingCourse._id}`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await API.put(`/courses/${editingCourse._id}`, formData, config);
         toast.success('Course updated successfully');
       } else {
-        await API.post('/courses', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        toast.success('Course published successfully to Cloudinary!');
+        await API.post('/courses', formData, config);
+        toast.success('Course published successfully!');
       }
 
       setCourseModalOpen(false);
@@ -581,12 +658,11 @@ export const AdminDashboard = () => {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`p-3 text-sm font-semibold flex items-center space-x-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === tab.key
+              className={`p-3 text-sm font-semibold flex items-center space-x-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${activeTab === tab.key
                   ? 'border-[#2563EB] text-[#60A5FA]'
                   : 'border-transparent text-slate-400 hover:bg-[#2563EB] hover:text-[#F8FAFC]'
-              }`}
-            >                    
+                }`}
+            >
               <Icon className="w-4 h-4" />
               <span>{tab.label}</span>
             </button>
@@ -842,11 +918,10 @@ export const AdminDashboard = () => {
                         <>
                           <button
                             onClick={() => handleToggleBlock(user._id)}
-                            className={`p-1.5 rounded-lg transition-colors ${
-                              user.isBlocked
+                            className={`p-1.5 rounded-lg transition-colors ${user.isBlocked
                                 ? 'text-emerald-400 hover:bg-emerald-950/50'
                                 : 'text-amber-400 hover:bg-amber-950/50'
-                            }`}
+                              }`}
                             title={user.isBlocked ? 'Unblock User' : 'Block User'}
                           >
                             {user.isBlocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
@@ -959,7 +1034,7 @@ export const AdminDashboard = () => {
                 <div className="space-y-3">
                   <div className="aspect-video relative overflow-hidden bg-[#0F172A] border-b border-[#1E293B]">
                     <img
-                      src={course.thumbnail?.url || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800'}
+                      src={course.thumbnail?.url || ''}
                       alt={course.title}
                       className="w-full h-full object-cover"
                     />
@@ -1117,7 +1192,6 @@ export const AdminDashboard = () => {
 
           <Textarea
             label="Description"
-            required
             rows={3}
             value={courseForm.description}
             onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })}
@@ -1154,62 +1228,142 @@ export const AdminDashboard = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Select
-              label="Category"
-              value={courseForm.category}
-              onChange={(e) => setCourseForm({ ...courseForm, category: e.target.value })}
-              options={[
-                { label: '-- Select Category --', value: '' },
-                ...categories.map((c) => ({ label: c.name, value: c._id })),
-              ]}
-            />
-
-            <Input
-              label="Duration"
-              value={courseForm.duration}
-              onChange={(e) => setCourseForm({ ...courseForm, duration: e.target.value })}
-              placeholder="e.g. 8 Hours"
-            />
-          </div>
+          <Select
+            label="Category"
+            value={courseForm.category}
+            onChange={(e) => setCourseForm({ ...courseForm, category: e.target.value })}
+            options={[
+              { label: '-- Select Category --', value: '' },
+              ...categories.map((c) => ({ label: c.name, value: c._id })),
+            ]}
+          />
 
           {/* Media Upload Fields */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-[#1E293B]">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300">Thumbnail File (Cloudinary Upload)</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setThumbnailFile(e.target.files[0])}
-                className="text-xs text-slate-400 cursor-pointer block"
-              />
-              <Input
-                placeholder="Or paste thumbnail URL..."
-                value={courseForm.thumbnailUrl}
-                onChange={(e) => setCourseForm({ ...courseForm, thumbnailUrl: e.target.value })}
-                className="!text-xs"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-[#1E293B]">
+            {/* Thumbnail Upload component */}
+            <div className="space-y-2 text-left">
+              <label className="text-xs font-semibold text-slate-300">Course Thumbnail</label>
+
+              <div className="border-2 border-dashed border-[#334155] hover:border-slate-500 rounded-lg p-4 text-center transition relative overflow-hidden bg-[#0F172A]/50">
+                {thumbnailPreview ? (
+                  <div className="space-y-2">
+                    <img
+                      src={thumbnailPreview}
+                      alt="Thumbnail Preview"
+                      className="mx-auto max-h-32 object-cover rounded shadow-md"
+                    />
+                    <div className="text-xs text-slate-400 truncate">
+                      {thumbnailInfo ? `${thumbnailInfo.name} (${thumbnailInfo.size})` : 'Current Thumbnail'}
+                    </div>
+                    {thumbnailSuccess && (
+                      <span className="inline-flex items-center text-emerald-400 text-xs font-medium bg-emerald-500/10 px-2 py-0.5 rounded">
+                        <CheckCircle2 size={12} className="mr-1" /> Upload Success
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-4">
+                    <BookOpen className="mx-auto text-slate-500 mb-2" size={28} />
+                    <p className="text-xs text-slate-400">Click to select Thumbnail image</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Accepted: jpg, jpeg, png, webp</p>
+                  </div>
+                )}
+
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp"
+                  onChange={handleThumbnailChange}
+                  disabled={thumbnailUploading}
+                  className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                />
+              </div>
+
+              {thumbnailUploading && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-semibold text-slate-400">
+                    <span>Uploading...</span>
+                    <span>{thumbnailProgress}%</span>
+                  </div>
+                  <div className="w-full bg-[#1E293B] rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-sky-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${thumbnailProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300">Video File (Cloudinary Stream Upload)</label>
-              <input
-                type="file"
-                accept="video/*"
-                onChange={(e) => setVideoFile(e.target.files[0])}
-                className="text-xs text-slate-400 cursor-pointer block"
-              />
-              <Input
-                placeholder="Or paste video MP4 URL..."
-                value={courseForm.videoUrl}
-                onChange={(e) => setCourseForm({ ...courseForm, videoUrl: e.target.value })}
-                className="!text-xs"
-              />
+            {/* Video Upload component */}
+            <div className="space-y-2 text-left">
+              <label className="text-xs font-semibold text-slate-300">Course Lecture Video</label>
+
+              <div className="border-2 border-dashed border-[#334155] hover:border-slate-500 rounded-lg p-4 text-center transition relative overflow-hidden bg-[#0F172A]/50">
+                {videoInfo ? (
+                  <div className="py-4 space-y-2">
+                    <div className="w-12 h-12 rounded-full bg-sky-500/10 flex items-center justify-center mx-auto text-sky-400">
+                      <Activity size={24} />
+                    </div>
+                    <div className="text-xs font-medium text-slate-300 truncate">
+                      {videoInfo.name}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      Size: {videoInfo.size}
+                    </div>
+                    {videoSuccess && (
+                      <span className="inline-flex items-center text-emerald-400 text-xs font-medium bg-emerald-500/10 px-2 py-0.5 rounded">
+                        <CheckCircle2 size={12} className="mr-1" /> Video Selected / Uploaded
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-4">
+                    <Activity className="mx-auto text-slate-500 mb-2" size={28} />
+                    <p className="text-xs text-slate-400">Click to select Lecture video</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Accepted: mp4, mov, webm, avi</p>
+                  </div>
+                )}
+
+                <input
+                  type="file"
+                  accept=".mp4,.mov,.webm,.avi"
+                  onChange={handleVideoChange}
+                  disabled={videoUploading}
+                  className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                />
+              </div>
+
+              {videoUploading && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-semibold text-slate-400">
+                    <span>Uploading...</span>
+                    <span>{videoProgress}%</span>
+                  </div>
+                  <div className="w-full bg-[#1E293B] rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-sky-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${videoProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          <Button variant="primary" size="lg" disabled={submittingCourse} type="submit" className="w-full">
-            {submittingCourse ? 'Saving Course...' : editingCourse ? 'Update Course' : 'Publish Course'}
+          <Button
+            variant="primary"
+            size="lg"
+            disabled={submittingCourse || thumbnailUploading || videoUploading}
+            type="submit"
+            className="w-full"
+          >
+            {submittingCourse
+              ? 'Saving Course...'
+              : thumbnailUploading || videoUploading
+                ? 'Uploading Media...'
+                : editingCourse
+                  ? 'Update Course'
+                  : 'Publish Course'}
           </Button>
         </form>
       </Modal>
@@ -1330,7 +1484,7 @@ export const AdminDashboard = () => {
 
           <div className="border-t border-[#1E293B] pt-4 space-y-4">
             <h4 className="text-xs font-bold text-[#F8FAFC]">Set Password</h4>
-            
+
             <Input
               label="Password"
               type="password"
@@ -1410,7 +1564,7 @@ export const AdminDashboard = () => {
 
           <div className="border-t border-[#1E293B] pt-4 space-y-4">
             <h4 className="text-xs font-bold text-[#F8FAFC]">Change Password (Optional)</h4>
-            
+
             <Input
               label="Password"
               type="password"
