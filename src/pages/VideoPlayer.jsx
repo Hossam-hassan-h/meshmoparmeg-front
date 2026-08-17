@@ -75,12 +75,16 @@ export const VideoPlayer = () => {
           {course?.video?.url ? (
             <video
               key={course.video.url}
+              src={course.video.url}
               controls
               controlsList="nodownload"
               poster={course.thumbnail?.url}
+              preload="metadata"
+              playsInline
               className="w-full h-full object-contain"
+              onError={(e) => console.error('Video playback error:', e)}
             >
-              <source src={course.video.url} type="video/mp4" />
+              <source src={course.video.url} />
               Your browser does not support HTML5 video playback.
             </video>
           ) : (
@@ -108,14 +112,6 @@ export const VideoPlayer = () => {
           </div>
 
           <p className="text-slate-700 text-sm leading-relaxed">{course?.description}</p>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-[#E2E8F0] space-y-1">
-            <h4 className="text-xs font-bold text-slate-900 uppercase flex items-center space-x-1.5">
-              <Info className="w-4 h-4 text-[#2563EB]" />
-              <span>Teaching Methodology</span>
-            </h4>
-            <p className="text-sm text-slate-600 italic">"{course?.teachingMethodology}"</p>
-          </div>
 
           {/* Requirements & Learning Outcomes */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">

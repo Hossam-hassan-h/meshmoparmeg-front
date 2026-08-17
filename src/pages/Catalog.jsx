@@ -177,11 +177,6 @@ export const Catalog = () => {
                     <p className="text-xs text-[#94A3B8] line-clamp-2 leading-relaxed">
                       {course.description}
                     </p>
-
-                    <div className="p-3 rounded-xl bg-[#0F172A] border border-[#1E293B] text-xs text-[#94A3B8] space-y-1">
-                      <strong className="block text-[#F8FAFC] font-semibold">Teaching Methodology:</strong>
-                      <p className="italic">"{course.teachingMethodology}"</p>
-                    </div>
                   </div>
                 </div>
 

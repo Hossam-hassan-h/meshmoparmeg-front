@@ -1,4 +1,5 @@
 import React from 'react';
+import { X, AlertTriangle } from 'lucide-react';
 
 export const Button = ({
   children,
@@ -121,6 +122,8 @@ export const Select = ({ label, options = [], className = '', ...props }) => {
   );
 };
 
+
+
 export const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
 
@@ -133,12 +136,45 @@ export const Modal = ({ isOpen, onClose, title, children }) => {
             onClick={onClose}
             className="text-[#94A3B8] hover:text-[#F8FAFC] font-bold p-1 rounded-lg hover:bg-[#1E293B]"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
         <div>{children}</div>
       </div>
     </div>
+  );
+};
+
+export const ConfirmModal = ({ isOpen, onClose, onConfirm, title = 'Confirm Action', message = 'Are you sure you want to perform this action?' }) => {
+  if (!isOpen) return null;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={title}>
+      <div className="space-y-6 pt-2 text-left">
+        <div className="flex items-start space-x-4">
+          <div className="p-3 rounded-full bg-red-500/10 text-red-500 border border-red-500/20 shrink-0">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm text-slate-300 leading-relaxed">{message}</p>
+          </div>
+        </div>
+        <div className="flex justify-end space-x-3 pt-4 border-t border-[#1E293B]">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+          >
+            Confirm Delete
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 };
 

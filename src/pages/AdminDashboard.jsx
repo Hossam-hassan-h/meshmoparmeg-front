@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import API from '../services/api';
-import { Button, Card, Badge, Input, Select, Modal, Textarea } from '../components/UI';
+import { Button, Card, Badge, Input, Select, Modal, Textarea, ConfirmModal } from '../components/UI';
+import UserMultiSelect from '../components/UserMultiSelect';
 import { useAuth } from '../context/AuthContext';
 import {
   Users,
@@ -30,6 +31,14 @@ export const AdminDashboard = () => {
   const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'users' | 'courses' | 'categories' | 'analytics'
   const [loading, setLoading] = useState(true);
+
+  // Global Action Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   // Stats Data
   const [stats, setStats] = useState({
@@ -104,13 +113,14 @@ export const AdminDashboard = () => {
   const [courses, setCourses] = useState([]);
   const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
+  const [selectedCourseDetail, setSelectedCourseDetail] = useState(null);
+  const [allowedUserIds, setAllowedUserIds] = useState([]);
   const [courseForm, setCourseForm] = useState({
     title: '',
     description: '',
-    teachingMethodology: '',
     difficulty: 'Beginner',
     category: '',
-    accessType: 'PRIVATE',
+    accessType: 'PUBLIC',
     requirements: '',
     learningOutcomes: '',
     thumbnailUrl: '',
@@ -343,19 +353,25 @@ export const AdminDashboard = () => {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
+  const handleDeleteUser = (userId) => {
     if (userId === currentUser?._id) {
       toast.error('You cannot delete your own Administrator account');
       return;
     }
-    if (!confirm('Are you sure you want to permanently delete this user account?')) return;
-    try {
-      await API.delete(`/admin/users/${userId}`);
-      toast.success('User account deleted successfully');
-      fetchDashboardData();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Error deleting user');
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete User Account',
+      message: 'Are you sure you want to permanently delete this user account?',
+      onConfirm: async () => {
+        try {
+          await API.delete(`/admin/users/${userId}`);
+          toast.success('User account deleted successfully');
+          fetchDashboardData();
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Error deleting user');
+        }
+      },
+    });
   };
 
   // Multi-select Course Access Grant
@@ -405,34 +421,38 @@ export const AdminDashboard = () => {
     }
   };
 
-  const handleDeleteCategory = async (catId) => {
-    if (!confirm('Are you sure you want to delete this category?')) return;
-    try {
-      await API.delete(`/categories/${catId}`);
-      toast.success('Category deleted');
-      fetchDashboardData();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Error deleting category');
-    }
+  const handleDeleteCategory = (catId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Category',
+      message: 'Are you sure you want to delete this category?',
+      onConfirm: async () => {
+        try {
+          await API.delete(`/categories/${catId}`);
+          toast.success('Category deleted');
+          fetchDashboardData();
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Error deleting category');
+        }
+      },
+    });
   };
 
-  // Course Actions
-  // Course Actions
   // Course Actions
   const openCreateCourseModal = () => {
     setEditingCourse(null);
     setCourseForm({
       title: '',
       description: '',
-      teachingMethodology: '',
       difficulty: 'Beginner',
       category: categories[0]?._id || '',
-      accessType: 'PRIVATE',
+      accessType: 'PUBLIC',
       requirements: '',
       learningOutcomes: '',
       thumbnail: null,
       video: null,
     });
+    setAllowedUserIds([]);
     setThumbnailFile(null);
     setVideoFile(null);
     setThumbnailPreview('');
@@ -452,15 +472,16 @@ export const AdminDashboard = () => {
     setCourseForm({
       title: course.title,
       description: course.description,
-      teachingMethodology: course.teachingMethodology,
       difficulty: course.difficulty || 'Beginner',
       category: course.category?._id || course.category || '',
-      accessType: course.accessType || 'PRIVATE',
+      accessType: course.accessType || 'PUBLIC',
       requirements: course.requirements?.join(', ') || '',
       learningOutcomes: course.learningOutcomes?.join(', ') || '',
       thumbnail: course.thumbnail || null,
       video: course.video || null,
     });
+    const existingAllowedIds = (course.allowedUsers || []).map((u) => (typeof u === 'string' ? u : u._id));
+    setAllowedUserIds(existingAllowedIds);
     setThumbnailFile(null);
     setVideoFile(null);
     setThumbnailPreview(course.thumbnail?.url || '');
@@ -526,17 +547,28 @@ export const AdminDashboard = () => {
     }
 
     setSubmittingCourse(true);
+    setThumbnailUploading(!!thumbnailFile);
+    setVideoUploading(!!videoFile);
+    setThumbnailProgress(0);
+    setVideoProgress(0);
 
     try {
       const formData = new FormData();
       formData.append('title', courseForm.title);
-      formData.append('description', courseForm.description);
-      formData.append('teachingMethodology', courseForm.teachingMethodology);
-      formData.append('difficulty', courseForm.difficulty);
+      formData.append('description', courseForm.description || '');
+      formData.append('teachingMethodology', courseForm.teachingMethodology || 'Interactive Curriculum');
+      formData.append('difficulty', courseForm.difficulty || 'Beginner');
       if (courseForm.category) {
         formData.append('category', courseForm.category);
       }
       formData.append('accessType', courseForm.accessType);
+      
+      // Append allowed users for restricted courses
+      if (courseForm.accessType === 'PRIVATE') {
+        formData.append('allowedUsers', JSON.stringify(allowedUserIds));
+      } else {
+        formData.append('allowedUsers', JSON.stringify([]));
+      }
       
       const reqs = courseForm.requirements.split(',').map((s) => s.trim()).filter(Boolean);
       formData.append('requirements', JSON.stringify(reqs));
@@ -557,7 +589,14 @@ export const AdminDashboard = () => {
       }
 
       const config = {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            if (thumbnailFile) setThumbnailProgress(percent);
+            if (videoFile) setVideoProgress(percent);
+          }
+        },
       };
 
       if (editingCourse) {
@@ -574,18 +613,26 @@ export const AdminDashboard = () => {
       toast.error(err.response?.data?.message || 'Error saving course');
     } finally {
       setSubmittingCourse(false);
+      setThumbnailUploading(false);
+      setVideoUploading(false);
     }
   };
 
-  const handleDeleteCourse = async (courseId) => {
-    if (!confirm('Are you sure you want to delete this course? Associated access records will be removed.')) return;
-    try {
-      await API.delete(`/courses/${courseId}`);
-      toast.success('Course deleted');
-      fetchDashboardData();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Error deleting course');
-    }
+  const handleDeleteCourse = (courseId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Course',
+      message: 'Are you sure you want to delete this course? Associated access records will be removed.',
+      onConfirm: async () => {
+        try {
+          await API.delete(`/courses/${courseId}`);
+          toast.success('Course deleted');
+          fetchDashboardData();
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Error deleting course');
+        }
+      },
+    });
   };
 
   if (loading) {
@@ -1039,9 +1086,17 @@ export const AdminDashboard = () => {
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute top-2 left-2 flex gap-1">
-                      <Badge variant={course.accessType === 'PUBLIC' ? 'success' : 'secondary'}>
-                        {course.accessType}
-                      </Badge>
+                      {course.accessType === 'PUBLIC' ? (
+                        <span className="px-2.5 py-1 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 text-xs font-bold shadow-md flex items-center space-x-1 backdrop-blur-sm">
+                          <span>🌍</span>
+                          <span>Public</span>
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-full bg-purple-950/90 text-purple-300 border border-purple-500/40 text-xs font-bold shadow-md flex items-center space-x-1 backdrop-blur-sm">
+                          <span>🔒</span>
+                          <span>Restricted ({(course.allowedUsers || []).length})</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -1055,11 +1110,29 @@ export const AdminDashboard = () => {
                   <span className="text-xs text-slate-400 font-medium">
                     {course.category?.name || 'Uncategorized'}
                   </span>
-                  <div className="space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => openEditCourseModal(course)}>
+                  <div className="space-x-2 flex items-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedCourseDetail(course)}
+                      title="View Course Details & Allowed Users"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEditCourseModal(course)}
+                      title="Edit Course & Allowed Users"
+                    >
                       <Edit className="w-3.5 h-3.5" />
                     </Button>
-                    <Button variant="danger" size="sm" onClick={() => handleDeleteCourse(course._id)}>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => handleDeleteCourse(course._id)}
+                      title="Delete Course"
+                    >
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -1197,25 +1270,59 @@ export const AdminDashboard = () => {
             onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })}
           />
 
-          <Textarea
-            label="Teaching Methodology"
-            required
-            rows={2}
-            value={courseForm.teachingMethodology}
-            onChange={(e) => setCourseForm({ ...courseForm, teachingMethodology: e.target.value })}
-          />
+          {/* Access Mode Selector */}
+          <div className="space-y-2 pt-1">
+            <label className="text-xs font-semibold text-[#94A3B8] block">Course Access Mode</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div
+                onClick={() => setCourseForm({ ...courseForm, accessType: 'PUBLIC' })}
+                className={`p-3 rounded-xl border cursor-pointer select-none transition-all flex flex-col space-y-1.5 ${
+                  courseForm.accessType === 'PUBLIC'
+                    ? 'bg-emerald-950/40 border-emerald-500/60 text-white ring-1 ring-emerald-500/40 shadow-lg'
+                    : 'bg-[#0F172A] border-[#1E293B] text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <span className="text-base">🌍</span>
+                  <span className="font-bold text-xs text-[#F8FAFC]">Public Course</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  Every registered student can access immediately. No manual assignment required.
+                </p>
+              </div>
+
+              <div
+                onClick={() => setCourseForm({ ...courseForm, accessType: 'PRIVATE' })}
+                className={`p-3 rounded-xl border cursor-pointer select-none transition-all flex flex-col space-y-1.5 ${
+                  courseForm.accessType === 'PRIVATE'
+                    ? 'bg-purple-950/40 border-purple-500/60 text-white ring-1 ring-purple-500/40 shadow-lg'
+                    : 'bg-[#0F172A] border-[#1E293B] text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <span className="text-base">🔒</span>
+                  <span className="font-bold text-xs text-[#F8FAFC]">Restricted Course</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  Only assigned students can access. Search & select allowed users below.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* If Restricted Mode, Searchable Multi-Select Component */}
+          {courseForm.accessType === 'PRIVATE' && (
+            <div className="p-4 rounded-2xl bg-[#0F172A] border border-purple-500/30 animate-fade-in shadow-md">
+              <UserMultiSelect
+                users={users}
+                selectedUserIds={allowedUserIds}
+                onChange={setAllowedUserIds}
+                label="Allowed Students (Restricted Access)"
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
-            <Select
-              label="Access Type"
-              value={courseForm.accessType}
-              onChange={(e) => setCourseForm({ ...courseForm, accessType: e.target.value })}
-              options={[
-                { label: 'PRIVATE (Admin Grant Required)', value: 'PRIVATE' },
-                { label: 'PUBLIC (Accessible to All Students)', value: 'PUBLIC' },
-              ]}
-            />
-
             <Select
               label="Difficulty"
               value={courseForm.difficulty}
@@ -1226,17 +1333,17 @@ export const AdminDashboard = () => {
                 { label: 'Advanced', value: 'Advanced' },
               ]}
             />
-          </div>
 
-          <Select
-            label="Category"
-            value={courseForm.category}
-            onChange={(e) => setCourseForm({ ...courseForm, category: e.target.value })}
-            options={[
-              { label: '-- Select Category --', value: '' },
-              ...categories.map((c) => ({ label: c.name, value: c._id })),
-            ]}
-          />
+            <Select
+              label="Category"
+              value={courseForm.category}
+              onChange={(e) => setCourseForm({ ...courseForm, category: e.target.value })}
+              options={[
+                { label: '-- Select Category --', value: '' },
+                ...categories.map((c) => ({ label: c.name, value: c._id })),
+              ]}
+            />
+          </div>
 
           {/* Media Upload Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-[#1E293B]">
@@ -1659,6 +1766,159 @@ export const AdminDashboard = () => {
           </div>
         )}
       </Modal>
+
+      {/* MODAL: COURSE ACCESS & DETAILS */}
+      <Modal
+        isOpen={Boolean(selectedCourseDetail)}
+        onClose={() => setSelectedCourseDetail(null)}
+        title="Course Access & Details"
+      >
+        {selectedCourseDetail && (
+          <div className="space-y-5 text-left text-sm text-slate-300">
+            {/* Header with thumbnail and metadata */}
+            <div className="flex flex-col sm:flex-row gap-4 items-start border-b border-[#1E293B] pb-4">
+              <div className="w-full sm:w-36 aspect-video rounded-xl overflow-hidden bg-[#0F172A] border border-[#1E293B] shrink-0">
+                <img
+                  src={selectedCourseDetail.thumbnail?.url || ''}
+                  alt={selectedCourseDetail.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <h4 className="font-bold text-[#F8FAFC] text-base leading-snug">
+                  {selectedCourseDetail.title}
+                </h4>
+                <p className="text-xs text-slate-400 line-clamp-2">
+                  {selectedCourseDetail.description || 'No description provided.'}
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Badge variant="primary">{selectedCourseDetail.category?.name || 'Uncategorized'}</Badge>
+                  <Badge variant="secondary">{selectedCourseDetail.difficulty}</Badge>
+                  <Badge variant="outline">{selectedCourseDetail.duration || '4 Hours'}</Badge>
+                </div>
+              </div>
+            </div>
+
+            {/* Access Mode Banner */}
+            <div
+              className={`p-3.5 rounded-xl border flex items-start space-x-3 ${
+                selectedCourseDetail.accessType === 'PUBLIC'
+                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                  : 'bg-purple-950/40 border-purple-500/40 text-purple-200'
+              }`}
+            >
+              <span className="text-xl">
+                {selectedCourseDetail.accessType === 'PUBLIC' ? '🌍' : '🔒'}
+              </span>
+              <div>
+                <h5 className="font-bold text-xs">
+                  {selectedCourseDetail.accessType === 'PUBLIC' ? 'Public Course' : 'Restricted Access Course'}
+                </h5>
+                <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                  {selectedCourseDetail.accessType === 'PUBLIC'
+                    ? 'All registered students can watch and access this course freely.'
+                    : 'Access is restricted exclusively to the assigned users listed below.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Allowed Users List */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h5 className="font-bold text-xs text-[#F8FAFC] flex items-center space-x-1.5">
+                  <Users className="w-4 h-4 text-[#3B82F6]" />
+                  <span>Allowed Users</span>
+                </h5>
+                {selectedCourseDetail.accessType === 'PRIVATE' && (
+                  <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#1E293B] text-[#60A5FA]">
+                    {(selectedCourseDetail.allowedUsers || []).length} users
+                  </span>
+                )}
+              </div>
+
+              {selectedCourseDetail.accessType === 'PUBLIC' ? (
+                <div className="p-4 rounded-xl bg-[#0F172A] border border-[#1E293B] text-center text-xs text-slate-400">
+                  <p className="font-semibold text-slate-300">Public Enrollment</p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Every platform student has instant access. No manual user assignment needed.
+                  </p>
+                </div>
+              ) : selectedCourseDetail.allowedUsers && selectedCourseDetail.allowedUsers.length > 0 ? (
+                <div className="max-h-56 overflow-y-auto divide-y divide-[#1E293B] border border-[#1E293B] rounded-xl bg-[#0B1120]">
+                  {selectedCourseDetail.allowedUsers.map((user) => {
+                    const userName = typeof user === 'string' ? user : user.name || 'User';
+                    const userEmail = typeof user === 'string' ? '' : user.email || '';
+                    const initials = userName.split(' ').map((p) => p[0]).join('').substring(0, 2).toUpperCase();
+
+                    return (
+                      <div key={user._id || user} className="px-3.5 py-2.5 flex items-center justify-between hover:bg-[#1E293B]/40 transition-colors">
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-[10px] font-bold text-white flex items-center justify-center shrink-0 shadow">
+                            {initials}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-semibold text-xs text-[#F8FAFC] truncate block">
+                              {userName}
+                            </span>
+                            {userEmail && (
+                              <span className="text-[11px] text-slate-400 truncate block">
+                                {userEmail}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
+                          Enrolled
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-[#0F172A] border border-[#1E293B] text-center text-xs text-slate-400">
+                  <p className="font-semibold text-amber-400">No users assigned yet</p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Click "Edit Allowed Users" below to assign students to this restricted course.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Action Buttons */}
+            <div className="flex justify-end space-x-2 pt-3 border-t border-[#1E293B]">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const courseToEdit = selectedCourseDetail;
+                  setSelectedCourseDetail(null);
+                  openEditCourseModal(courseToEdit);
+                }}
+                className="space-x-1.5"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span>Edit Allowed Users</span>
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setSelectedCourseDetail(null)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Global Action Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+      />
     </div>
   );
 };
