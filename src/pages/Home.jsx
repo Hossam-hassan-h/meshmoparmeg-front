@@ -357,10 +357,7 @@ export const Home = () => {
             transition={{ duration: 0.8 }}
             className="lg:col-span-6 space-y-6 text-center lg:text-left"
           >
-            <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-blue-950/80 border border-blue-500/30 text-[#06B6D4] text-xs font-mono font-bold tracking-wider">
-              <Sparkles className="w-4 h-4 text-[#2563EB]" />
-              <span>For Baccalaureate &amp; High School Students</span>
-            </div>
+      
 
             <h1 className="text-4xl sm:text-6xl font-black text-[#F8FAFC] tracking-tight leading-tight">
               Learn Programming <br />

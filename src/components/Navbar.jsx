@@ -44,13 +44,9 @@ export const Navbar = () => {
             <div className="flex flex-col">
               <span className="font-extrabold text-xl tracking-tight text-[#F8FAFC]">
                 Bac<span className="text-[#2563EB]">Dev</span>
-                <span className="text-[#06B6D4] font-mono text-xs font-semibold ml-1.5 px-2 py-0.5 rounded-md bg-[#0F172A] border border-[#1E293B]">
-                  PRO
-                </span>
+               
               </span>
-              <span className="text-[10px] text-[#94A3B8] font-mono tracking-wider">
-                Baccalaureate CS Platform
-              </span>
+             
             </div>
           </Link>
 

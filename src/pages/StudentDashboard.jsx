@@ -37,10 +37,7 @@ export const StudentDashboard = () => {
       {/* Student Welcome Banner */}
       <Card className="!p-8 bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border-slate-800">
         <div className="space-y-2">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold uppercase">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Verified Student Active Session</span>
-          </div>
+        
           <h1 className="text-3xl font-extrabold">
             Welcome back, <span className="text-blue-400">{user?.name}</span>
           </h1>
